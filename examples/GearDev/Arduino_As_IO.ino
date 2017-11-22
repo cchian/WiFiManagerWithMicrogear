@@ -2,6 +2,8 @@
 /* การสั่งงานบอร์ด ต้องกระทำผ่าน Serial โดย แพทเทิลของข้อความที่จะส่งมา ดูได้ในหน้า Readme */
 #include "Button.h"
 #include <EEPROM.h>
+int STA = 1;
+bool espboot = false;
 
 //ตำแหน่ง EEPROM ที่จะให้กู้คืนค่าสถานะขาสัญญาณ
 #define _prevStateAddr 2
@@ -10,15 +12,15 @@ int resetTricker = 10;
 int clearSettingTricker = 11;
 
 void setup() {
-  pinMode(resetTricker,OUTPUT);
-  pinMode(clearSettingTricker,OUTPUT);
-  digitalWrite(clearSettingTricker,1);
+  pinMode(resetTricker, OUTPUT);
+  pinMode(clearSettingTricker, OUTPUT);
+  digitalWrite(clearSettingTricker, 1);
 #if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
   Serial2.begin(SERIAL_BAUD_RATE);
 #endif
   Serial.begin(SERIAL_BAUD_RATE);
 
-  
+
   resetSwitch.setLongHoldTime(10000); //assign long hold time to 10s
   resetSwitch.eventClick(resetSwitchClick);
   resetSwitch.eventHold(resetSwitchHold);
@@ -35,22 +37,23 @@ void setup() {
 
 void resetSwitchClick(int sender) {
   //nomal reset
-  digitalWrite(resetTricker,0);
+  digitalWrite(resetTricker, 0);
   delay(100);
-  digitalWrite(resetTricker,1);
+  digitalWrite(resetTricker, 1);
   Serial.println("Reset ESP8266");
 }
-void resetSwitchHold(int sender){
-  
+
+void resetSwitchHold(int sender) {
+
 }
 void resetSwitchLongHold(int sender) {
   //if reset switch is longhol for 10 clear setting and reset
-  digitalWrite(resetTricker,0);
-  digitalWrite(clearSettingTricker,0);
+  digitalWrite(resetTricker, 0);
+  digitalWrite(clearSettingTricker, 0);
   delay(100);
-  digitalWrite(resetTricker,1);
+  digitalWrite(resetTricker, 1);
   delay(500);
-  digitalWrite(clearSettingTricker,1);
+  digitalWrite(clearSettingTricker, 1);
   Serial.println("Reset ESP8266 with request Clear Setting");
 }
 
@@ -238,6 +241,11 @@ void processCommand() {
       }
       setPinsValue(ch.toInt());
     }
+  } else if (body.startsWith("RUN:")) {
+    body.replace("RUN:", "");
+    STA = body.toInt();
+  } else if (body.equals("done")) {
+    espboot = true;
   } else {
 #if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
     Serial2.println("not a command!");
@@ -251,7 +259,26 @@ void endableRestorePreviosPinState(boolean b) {
 }
 
 void loop() {
+  unsigned long currentMillis = millis();
   resetSwitch.handleButton();
+
+  //check esp8266 running status
+  if (currentMillis - pRunning >= (sta_running_duration)) {
+    Serial.print("check esp is running:");
+    if (espboot) {
+      Serial.println(STA);
+      if (STA > 0) {
+        STA -= 1;
+      } else {
+        resetSwitchClick(0);
+        espboot=false;
+      }
+    }else{
+      Serial.println("booting yet!");
+    }
+    pRunning = currentMillis;
+  }
+
 #if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
   serialEvent1();
   serialEvent();
@@ -266,7 +293,7 @@ void loop() {
     stringComplete = false;
   }
   //Serial.println("e");
-  
+
 }
 
 
